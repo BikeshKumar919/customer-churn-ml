@@ -1,8 +1,18 @@
-from fastapi import FastAPI
-from schemas import CustomerRequest
+from fastapi import FastAPI, HTTPException
 
-app = FastAPI()
+from api.config import settings
+from api.logger import get_logger
+from api.schemas import CustomerRequest, PredictionResponse
+from api.model_service import is_model_loaded, predict_churn
 
+
+logger = get_logger(__name__)
+
+app = FastAPI(
+    title=settings.app_name,
+    description="ML API for predicting customer churn",
+    version=settings.app_version
+)
 
 @app.get("/")
 def home():
@@ -14,22 +24,31 @@ def home():
 @app.get("/health")
 def health():
     return {
-        "status": "UP"
+        "status": "UP",
+        "model_loaded": is_model_loaded()
     }
 
 
-@app.get("/hello/{name}")
-def hello(name: str):
-    return {
-        "message": f"Hello {name}!"
-    }
+@app.post(
+    "/predict",
+    response_model=PredictionResponse
+)
+def predict(customer: CustomerRequest):
 
+    logger.info("Prediction request received")
 
+    try:
+        result = predict_churn(
+            customer.model_dump()
+        )
 
+        return result
 
-@app.post("/customer")
-def create_customer(customer: CustomerRequest):
-    return {
-        "message": "Customer received",
-        "customer": customer
-    }
+    except Exception as e:
+
+        logger.exception("Prediction failed")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Prediction failed"
+        )
